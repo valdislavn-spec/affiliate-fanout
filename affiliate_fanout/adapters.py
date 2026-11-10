@@ -515,3 +515,497 @@ def post_slack(env: Dict[str, str], text: str) -> PublishResult:
     webhook = need(env, "SLACK_WEBHOOK_URL")
     request("POST", webhook, json_body={"text": text})
     return PublishResult("slack", True)
+
+
+# ===========================================================================
+# Global (non-RU) free APIs: X, Reddit, Pinterest, Meta, LinkedIn, Medium,
+# Blogger, WordPress. Mostly require an app + user token / OAuth review.
+# ===========================================================================
+
+def _basic_auth(username: str, password: str) -> str:
+    return "Basic " + base64.b64encode("{}:{}".format(username, password).encode()).decode()
+
+
+# ---------------------------------------------------------------------------
+# X (Twitter) API v2 — OAuth 1.0a user context (free tier: 500 posts/month)
+# ---------------------------------------------------------------------------
+X_DEFAULT_BASE = "https://api.x.com"
+
+
+def _x_base(env: Dict[str, str]) -> str:
+    return (get(env, "X_API_BASE", default=X_DEFAULT_BASE)).rstrip("/")
+
+
+def _x_auth_header(method: str, url: str, env: Dict[str, str]) -> str:
+    oauth = {
+        "oauth_consumer_key": need(env, "X_API_KEY"),
+        "oauth_nonce": str(random.getrandbits(64)),
+        "oauth_signature_method": "HMAC-SHA1",
+        "oauth_timestamp": str(int(time.time())),
+        "oauth_version": "1.0",
+        "oauth_token": need(env, "X_ACCESS_TOKEN"),
+    }
+    signature = _oauth1_signature(
+        method, url, oauth, need(env, "X_API_SECRET"), need(env, "X_ACCESS_SECRET")
+    )
+    return "OAuth " + ", ".join(
+        ['{}="{}"'.format(_pct(k), _pct(v)) for k, v in {**oauth, "oauth_signature": signature}.items()]
+    )
+
+
+def verify_x(env: Dict[str, str]) -> Dict[str, Any]:
+    url = join_url(_x_base(env), "/2/users/me")
+    status, body = request("GET", url, headers={"Authorization": _x_auth_header("GET", url, env)})
+    data = json.loads(body) if body else {}
+    user = data.get("data") or {}
+    if status >= 400 or "errors" in data:
+        raise AdapterError("X API: {}".format(str(data)[:160]))
+    return {"ok": True, "account": "@{}".format(user.get("username") or "x")}
+
+
+def post_x(env: Dict[str, str], text: str) -> PublishResult:
+    url = join_url(_x_base(env), "/2/tweets")
+    status, body = request(
+        "POST",
+        url,
+        headers={"Authorization": _x_auth_header("POST", url, env)},
+        json_body={"text": text},
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400 or "errors" in data:
+        raise AdapterError("X API: {}".format(str(data)[:160]))
+    tweet_id = (data.get("data") or {}).get("id") or ""
+    return PublishResult("x", True, "https://x.com/i/web/status/{}".format(tweet_id) if tweet_id else "")
+
+
+# ---------------------------------------------------------------------------
+# Reddit API — OAuth2 password (script app), free non-commercial
+# ---------------------------------------------------------------------------
+REDDIT_DEFAULT_BASE = "https://oauth.reddit.com"
+
+
+def _reddit_token(env: Dict[str, str]) -> str:
+    base = get(env, "REDDIT_AUTH_BASE", default="https://www.reddit.com").rstrip("/")
+    payload = {
+        "grant_type": "password",
+        "username": need(env, "REDDIT_USERNAME"),
+        "password": need(env, "REDDIT_PASSWORD"),
+    }
+    status, body = request(
+        "POST",
+        join_url(base, "/api/v1/access_token"),
+        headers={
+            "Authorization": _basic_auth(
+                need(env, "REDDIT_CLIENT_ID"), need(env, "REDDIT_CLIENT_SECRET")
+            ),
+            "User-Agent": get(env, "REDDIT_USER_AGENT", default="affiliate-fanout/0.1"),
+        },
+        form_body=payload,
+    )
+    data = json.loads(body) if body else {}
+    token = data.get("access_token")
+    if not token:
+        raise AdapterError("Reddit OAuth: {}".format(str(data)[:160]))
+    return token
+
+
+def _reddit_base(env: Dict[str, str]) -> str:
+    return (get(env, "REDDIT_API_BASE", default=REDDIT_DEFAULT_BASE)).rstrip("/")
+
+
+def verify_reddit(env: Dict[str, str]) -> Dict[str, Any]:
+    token = _reddit_token(env)
+    base = _reddit_base(env)
+    status, body = request(
+        "GET",
+        join_url(base, "/api/v1/me"),
+        headers={
+            "Authorization": "Bearer " + token,
+            "User-Agent": get(env, "REDDIT_USER_AGENT", default="affiliate-fanout/0.1"),
+        },
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Reddit: {}".format(str(data)[:160]))
+    return {"ok": True, "account": "u/{}".format(data.get("name") or "reddit")}
+
+
+def post_reddit(env: Dict[str, str], title: str, url: str) -> PublishResult:
+    token = _reddit_token(env)
+    payload = {
+        "sr": need(env, "REDDIT_SUBREDDIT"),
+        "title": title or "Deal",
+        "url": url,
+        "kind": "link",
+        "api_type": "json",
+    }
+    status, body = request(
+        "POST",
+        join_url(_reddit_base(env), "/api/submit"),
+        headers={
+            "Authorization": "Bearer " + token,
+            "User-Agent": get(env, "REDDIT_USER_AGENT", default="affiliate-fanout/0.1"),
+        },
+        form_body=payload,
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400 or (data.get("json") or {}).get("errors"):
+        raise AdapterError("Reddit: {}".format(str(data)[:160]))
+    url_out = ((data.get("json") or {}).get("data") or {}).get("url") or ""
+    return PublishResult("reddit", True, url_out)
+
+
+# ---------------------------------------------------------------------------
+# Pinterest API v5 — needs image URL + approved app
+# ---------------------------------------------------------------------------
+PINTEREST_DEFAULT_BASE = "https://api.pinterest.com"
+
+
+def _pinterest_base(env: Dict[str, str]) -> str:
+    return (get(env, "PINTEREST_API_BASE", default=PINTEREST_DEFAULT_BASE)).rstrip("/")
+
+
+def verify_pinterest(env: Dict[str, str]) -> Dict[str, Any]:
+    token = need(env, "PINTEREST_ACCESS_TOKEN")
+    status, body = request(
+        "GET",
+        join_url(_pinterest_base(env), "/v5/user_account"),
+        headers={"Authorization": "Bearer " + token},
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Pinterest: {}".format(str(data)[:160]))
+    return {"ok": True, "account": "pinterest:{}".format(data.get("username") or "user")}
+
+
+def post_pinterest(env: Dict[str, str], title: str, url: str, text: str) -> PublishResult:
+    token = need(env, "PINTEREST_ACCESS_TOKEN")
+    board = need(env, "PINTEREST_BOARD_ID")
+    image = need(env, "PINTEREST_IMAGE_URL")
+    status, body = request(
+        "POST",
+        join_url(_pinterest_base(env), "/v5/pins"),
+        headers={"Authorization": "Bearer " + token},
+        json_body={
+            "board_id": board,
+            "title": (title or "Deal")[:100],
+            "description": text[:500],
+            "link": url,
+            "media_source": {"source_type": "image_url", "url": image},
+        },
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Pinterest: {}".format(str(data)[:160]))
+    return PublishResult("pinterest", True, "https://www.pinterest.com/pin/{}/".format(data.get("id") or ""))
+
+
+# ---------------------------------------------------------------------------
+# Meta: Facebook Page / Instagram / Threads (Graph API, app review needed)
+# ---------------------------------------------------------------------------
+META_DEFAULT_BASE = "https://graph.facebook.com"
+THREADS_DEFAULT_BASE = "https://graph.threads.net"
+
+
+def _meta_base(env: Dict[str, str]) -> str:
+    return (get(env, "META_API_BASE", default=META_DEFAULT_BASE)).rstrip("/")
+
+
+def _threads_base(env: Dict[str, str]) -> str:
+    return (get(env, "THREADS_API_BASE", default=THREADS_DEFAULT_BASE)).rstrip("/")
+
+
+def verify_facebook(env: Dict[str, str]) -> Dict[str, Any]:
+    page_id = need(env, "FACEBOOK_PAGE_ID")
+    token = need(env, "FACEBOOK_PAGE_TOKEN")
+    status, body = request(
+        "GET", join_url(_meta_base(env), "/{}?fields=name&access_token={}".format(page_id, token))
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Facebook: {}".format(str(data)[:160]))
+    return {"ok": True, "account": "facebook:{}".format(data.get("name") or page_id)}
+
+
+def post_facebook(env: Dict[str, str], text: str, url: str) -> PublishResult:
+    page_id = need(env, "FACEBOOK_PAGE_ID")
+    token = need(env, "FACEBOOK_PAGE_TOKEN")
+    status, body = request(
+        "POST",
+        join_url(_meta_base(env), "/{}/feed".format(page_id)),
+        form_body={"message": text, "link": url, "access_token": token},
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Facebook: {}".format(str(data)[:160]))
+    post_id = data.get("id") or ""
+    return PublishResult("facebook", True, "https://www.facebook.com/{}".format(post_id) if post_id else "")
+
+
+def verify_instagram(env: Dict[str, str]) -> Dict[str, Any]:
+    user_id = need(env, "INSTAGRAM_USER_ID")
+    token = need(env, "INSTAGRAM_ACCESS_TOKEN")
+    status, body = request(
+        "GET", join_url(_meta_base(env), "/{}?fields=username&access_token={}".format(user_id, token))
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Instagram: {}".format(str(data)[:160]))
+    return {"ok": True, "account": "instagram:{}".format(data.get("username") or user_id)}
+
+
+def post_instagram(env: Dict[str, str], text: str) -> PublishResult:
+    user_id = need(env, "INSTAGRAM_USER_ID")
+    token = need(env, "INSTAGRAM_ACCESS_TOKEN")
+    image = need(env, "INSTAGRAM_IMAGE_URL")
+    status, body = request(
+        "POST",
+        join_url(_meta_base(env), "/{}/media".format(user_id)),
+        form_body={"image_url": image, "caption": text, "access_token": token},
+    )
+    creation = json.loads(body) if body else {}
+    if status >= 400 or not creation.get("id"):
+        raise AdapterError("Instagram media: {}".format(str(creation)[:160]))
+    status, body = request(
+        "POST",
+        join_url(_meta_base(env), "/{}/media_publish".format(user_id)),
+        form_body={"creation_id": creation["id"], "access_token": token},
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Instagram publish: {}".format(str(data)[:160]))
+    return PublishResult("instagram", True)
+
+
+def verify_threads(env: Dict[str, str]) -> Dict[str, Any]:
+    token = need(env, "THREADS_ACCESS_TOKEN")
+    status, body = request(
+        "GET", join_url(_threads_base(env), "/v1.0/me?fields=id,username&access_token={}".format(token))
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Threads: {}".format(str(data)[:160]))
+    return {"ok": True, "account": "threads:{}".format(data.get("username") or "user")}
+
+
+def post_threads(env: Dict[str, str], text: str) -> PublishResult:
+    user_id = need(env, "THREADS_USER_ID")
+    token = need(env, "THREADS_ACCESS_TOKEN")
+    status, body = request(
+        "POST",
+        join_url(_threads_base(env), "/v1.0/{}/threads".format(user_id)),
+        form_body={"media_type": "TEXT", "text": text, "access_token": token},
+    )
+    creation = json.loads(body) if body else {}
+    if status >= 400 or not creation.get("id"):
+        raise AdapterError("Threads create: {}".format(str(creation)[:160]))
+    status, body = request(
+        "POST",
+        join_url(_threads_base(env), "/v1.0/{}/threads_publish".format(user_id)),
+        form_body={"creation_id": creation["id"], "access_token": token},
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Threads publish: {}".format(str(data)[:160]))
+    return PublishResult("threads", True)
+
+
+# ---------------------------------------------------------------------------
+# LinkedIn REST Posts API (app review; w_member_social)
+# ---------------------------------------------------------------------------
+LINKEDIN_DEFAULT_BASE = "https://api.linkedin.com"
+
+
+def _linkedin_base(env: Dict[str, str]) -> str:
+    return (get(env, "LINKEDIN_API_BASE", default=LINKEDIN_DEFAULT_BASE)).rstrip("/")
+
+
+def _linkedin_headers(env: Dict[str, str]) -> Dict[str, str]:
+    return {
+        "Authorization": "Bearer " + need(env, "LINKEDIN_ACCESS_TOKEN"),
+        "LinkedIn-Version": get(env, "LINKEDIN_VERSION", default="2025-01"),
+        "X-Restli-Protocol-Version": "2.0.0",
+    }
+
+
+def verify_linkedin(env: Dict[str, str]) -> Dict[str, Any]:
+    token = need(env, "LINKEDIN_ACCESS_TOKEN")
+    status, body = request(
+        "GET", join_url(_linkedin_base(env), "/v2/userinfo"),
+        headers={"Authorization": "Bearer " + token},
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("LinkedIn: {}".format(str(data)[:160]))
+    return {"ok": True, "account": "linkedin:{}".format(data.get("name") or data.get("sub") or "me")}
+
+
+def post_linkedin(env: Dict[str, str], text: str) -> PublishResult:
+    author = need(env, "LINKEDIN_AUTHOR_URN")
+    status, body = request(
+        "POST",
+        join_url(_linkedin_base(env), "/rest/posts"),
+        headers=_linkedin_headers(env),
+        json_body={
+            "author": author,
+            "commentary": text,
+            "visibility": "PUBLIC",
+            "distribution": {"feedDistribution": "MAIN_FEED"},
+            "lifecycleState": "PUBLISHED",
+        },
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("LinkedIn: {}".format(str(data)[:160]))
+    return PublishResult("linkedin", True, "")
+
+
+# ---------------------------------------------------------------------------
+# Medium (legacy Integration API: новые токены не выдают, старые работают)
+# ---------------------------------------------------------------------------
+MEDIUM_DEFAULT_BASE = "https://api.medium.com"
+
+
+def _medium_base(env: Dict[str, str]) -> str:
+    return (get(env, "MEDIUM_API_BASE", default=MEDIUM_DEFAULT_BASE)).rstrip("/")
+
+
+def verify_medium(env: Dict[str, str]) -> Dict[str, Any]:
+    token = need(env, "MEDIUM_TOKEN")
+    status, body = request(
+        "GET", join_url(_medium_base(env), "/v1/me"),
+        headers={"Authorization": "Bearer " + token},
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Medium: {}".format(str(data)[:160]))
+    return {"ok": True, "account": "medium:{}".format((data.get("data") or {}).get("username") or "me")}
+
+
+def post_medium(env: Dict[str, str], title: str, text: str) -> PublishResult:
+    token = need(env, "MEDIUM_TOKEN")
+    author_id = need(env, "MEDIUM_AUTHOR_ID")
+    status, body = request(
+        "POST",
+        join_url(_medium_base(env), "/v1/users/{}/posts".format(author_id)),
+        headers={"Authorization": "Bearer " + token},
+        json_body={
+            "title": title or "Affiliate deal",
+            "contentFormat": "markdown",
+            "content": text,
+            "publishStatus": "public",
+        },
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Medium: {}".format(str(data)[:160]))
+    return PublishResult("medium", True, (data.get("data") or {}).get("url") or "")
+
+
+# ---------------------------------------------------------------------------
+# Blogger API v3 (Google OAuth2 refresh token)
+# ---------------------------------------------------------------------------
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+BLOGGER_DEFAULT_BASE = "https://www.googleapis.com/blogger/v3"
+
+
+def _blogger_token(env: Dict[str, str]) -> str:
+    status, body = request(
+        "POST",
+        get(env, "GOOGLE_TOKEN_URL", default=GOOGLE_TOKEN_URL),
+        form_body={
+            "client_id": need(env, "BLOGGER_CLIENT_ID"),
+            "client_secret": need(env, "BLOGGER_CLIENT_SECRET"),
+            "refresh_token": need(env, "BLOGGER_REFRESH_TOKEN"),
+            "grant_type": "refresh_token",
+        },
+    )
+    data = json.loads(body) if body else {}
+    token = data.get("access_token")
+    if not token:
+        raise AdapterError("Blogger OAuth: {}".format(str(data)[:160]))
+    return token
+
+
+def verify_blogger(env: Dict[str, str]) -> Dict[str, Any]:
+    token = _blogger_token(env)
+    blog_id = need(env, "BLOGGER_BLOG_ID")
+    base = (get(env, "BLOGGER_API_BASE", default=BLOGGER_DEFAULT_BASE)).rstrip("/")
+    status, body = request(
+        "GET", join_url(base, "/blogs/{}".format(blog_id)),
+        headers={"Authorization": "Bearer " + token},
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Blogger: {}".format(str(data)[:160]))
+    return {"ok": True, "account": "blogger:{}".format(data.get("name") or blog_id)}
+
+
+def post_blogger(env: Dict[str, str], title: str, text: str) -> PublishResult:
+    token = _blogger_token(env)
+    blog_id = need(env, "BLOGGER_BLOG_ID")
+    base = (get(env, "BLOGGER_API_BASE", default=BLOGGER_DEFAULT_BASE)).rstrip("/")
+    content = "<p>{}</p>".format(html_lib.escape(text).replace("\n", "<br/>"))
+    status, body = request(
+        "POST",
+        join_url(base, "/blogs/{}/posts/".format(blog_id)),
+        headers={"Authorization": "Bearer " + token},
+        json_body={"kind": "blogger#post", "title": title or "Affiliate deal", "content": content},
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("Blogger: {}".format(str(data)[:160]))
+    return PublishResult("blogger", True, data.get("url") or "")
+
+
+# ---------------------------------------------------------------------------
+# WordPress: self-hosted (Application Password) и WordPress.com (OAuth2)
+# ---------------------------------------------------------------------------
+def verify_wordpress(env: Dict[str, str]) -> Dict[str, Any]:
+    if get(env, "WP_BASE_URL"):
+        auth = _basic_auth(need(env, "WP_USERNAME"), need(env, "WP_APP_PASSWORD"))
+        status, body = request(
+            "GET", join_url(env["WP_BASE_URL"].rstrip("/"), "/wp-json/wp/v2/users/me"),
+            headers={"Authorization": auth},
+        )
+        data = json.loads(body) if body else {}
+        if status >= 400:
+            raise AdapterError("WordPress: {}".format(str(data)[:160]))
+        return {"ok": True, "account": "wordpress:{}".format(data.get("name") or "me")}
+    site = need(env, "WPCOM_SITE")
+    token = need(env, "WPCOM_ACCESS_TOKEN")
+    status, body = request(
+        "GET", "https://public-api.wordpress.com/rest/v1.1/sites/{}".format(site),
+        headers={"Authorization": "Bearer " + token},
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("WordPress.com: {}".format(str(data)[:160]))
+    return {"ok": True, "account": "wordpress.com:{}".format(data.get("name") or site)}
+
+
+def post_wordpress(env: Dict[str, str], title: str, text: str) -> PublishResult:
+    content = "<p>{}</p>".format(html_lib.escape(text).replace("\n", "<br/>"))
+    if get(env, "WP_BASE_URL"):
+        base = env["WP_BASE_URL"].rstrip("/")
+        auth = _basic_auth(need(env, "WP_USERNAME"), need(env, "WP_APP_PASSWORD"))
+        status, body = request(
+            "POST", join_url(base, "/wp-json/wp/v2/posts"),
+            headers={"Authorization": auth},
+            json_body={"title": title or "Affiliate deal", "content": content, "status": "publish"},
+        )
+        data = json.loads(body) if body else {}
+        if status >= 400:
+            raise AdapterError("WordPress: {}".format(str(data)[:160]))
+        return PublishResult("wordpress", True, data.get("link") or "")
+    site = need(env, "WPCOM_SITE")
+    token = need(env, "WPCOM_ACCESS_TOKEN")
+    status, body = request(
+        "POST", "https://public-api.wordpress.com/rest/v1.1/sites/{}/posts/new".format(site),
+        headers={"Authorization": "Bearer " + token},
+        json_body={"title": title or "Affiliate deal", "content": content, "status": "publish"},
+    )
+    data = json.loads(body) if body else {}
+    if status >= 400:
+        raise AdapterError("WordPress.com: {}".format(str(data)[:160]))
+    return PublishResult("wordpress", True, data.get("URL") or "")

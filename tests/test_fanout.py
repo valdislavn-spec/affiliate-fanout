@@ -53,6 +53,31 @@ class FanoutTests(unittest.TestCase):
             "RAINDROP_TOKEN": "rd-token",
             "RAINDROP_API_BASE": base,
             "SLACK_WEBHOOK_URL": base + "/services/T/B/X",
+            "X_API_KEY": "x-key", "X_API_SECRET": "x-secret",
+            "X_ACCESS_TOKEN": "x-token", "X_ACCESS_SECRET": "x-access-secret",
+            "X_API_BASE": base,
+            "REDDIT_CLIENT_ID": "rd-id", "REDDIT_CLIENT_SECRET": "rd-secret",
+            "REDDIT_USERNAME": "rd-user", "REDDIT_PASSWORD": "rd-pass",
+            "REDDIT_SUBREDDIT": "testsub",
+            "REDDIT_AUTH_BASE": base, "REDDIT_API_BASE": base,
+            "PINTEREST_ACCESS_TOKEN": "pin-token", "PINTEREST_BOARD_ID": "board-1",
+            "PINTEREST_IMAGE_URL": "https://example.com/pin.jpg",
+            "PINTEREST_API_BASE": base,
+            "FACEBOOK_PAGE_ID": "page123", "FACEBOOK_PAGE_TOKEN": "fb-token",
+            "META_API_BASE": base,
+            "INSTAGRAM_USER_ID": "ig123", "INSTAGRAM_ACCESS_TOKEN": "ig-token",
+            "INSTAGRAM_IMAGE_URL": "https://example.com/ig.jpg",
+            "THREADS_USER_ID": "thread123", "THREADS_ACCESS_TOKEN": "th-token",
+            "THREADS_API_BASE": base,
+            "LINKEDIN_ACCESS_TOKEN": "li-token", "LINKEDIN_AUTHOR_URN": "urn:li:person:abc",
+            "LINKEDIN_API_BASE": base,
+            "MEDIUM_TOKEN": "med-token", "MEDIUM_AUTHOR_ID": "med-123",
+            "MEDIUM_API_BASE": base,
+            "BLOGGER_CLIENT_ID": "g-id", "BLOGGER_CLIENT_SECRET": "g-secret",
+            "BLOGGER_REFRESH_TOKEN": "g-refresh", "BLOGGER_BLOG_ID": "123",
+            "GOOGLE_TOKEN_URL": base + "/token", "BLOGGER_API_BASE": base,
+            "WP_BASE_URL": base,
+            "WP_USERNAME": "wp-user", "WP_APP_PASSWORD": "wp-pass",
         }
 
     def tearDown(self) -> None:
@@ -65,6 +90,8 @@ class FanoutTests(unittest.TestCase):
             [
                 "telegram", "vk", "tumblr", "bluesky", "mastodon", "akkoma",
                 "pixelfed", "devto", "discord", "telegraph", "slack", "raindrop",
+                "x", "reddit", "pinterest", "facebook", "instagram", "threads",
+                "linkedin", "medium", "blogger", "wordpress",
             ],
         )
         for platform, data in report["platforms"].items():
@@ -152,6 +179,31 @@ class FanoutTests(unittest.TestCase):
         self.assertTrue(result.ok)
         request = self.api.find("/services/")
         self.assertEqual(request["body"]["text"], "hello slack")
+
+    def test_global_adapters_post(self) -> None:
+        self.assertTrue(adapters.post_x(self.env, "hello x").ok)
+        self.assertTrue(adapters.post_reddit(self.env, "Deal", "https://example.com").ok)
+        self.assertTrue(adapters.post_pinterest(self.env, "Deal", "https://example.com", "text").ok)
+        self.assertTrue(adapters.post_facebook(self.env, "text", "https://example.com").ok)
+        self.assertTrue(adapters.post_instagram(self.env, "caption").ok)
+        self.assertTrue(adapters.post_threads(self.env, "thread text").ok)
+        self.assertTrue(adapters.post_linkedin(self.env, "linkedin text").ok)
+        medium = adapters.post_medium(self.env, "Title", "body")
+        self.assertTrue(medium.ok)
+        self.assertIn("medium.com", medium.url)
+        blogger = adapters.post_blogger(self.env, "Title", "body")
+        self.assertTrue(blogger.ok)
+        self.assertIn("blogspot.com", blogger.url)
+        wordpress = adapters.post_wordpress(self.env, "Title", "body")
+        self.assertTrue(wordpress.ok)
+        self.assertIn("test.blog", wordpress.url)
+
+    def test_x_oauth_header_present(self) -> None:
+        result = adapters.post_x(self.env, "hello x")
+        self.assertTrue(result.ok)
+        request = self.api.find("/2/tweets")
+        self.assertIn("OAuth", request["headers"]["Authorization"])
+        self.assertEqual(request["body"]["text"], "hello x")
 
     # ---------------------------------------------------------------- links
     def test_travelpayouts_creates_links_with_subids(self) -> None:

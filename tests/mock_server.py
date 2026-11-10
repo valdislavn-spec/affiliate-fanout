@@ -70,6 +70,28 @@ class MockAPIs:
                     return self._send(200, {"username": "tester"})
                 if path.endswith("/rest/v1/user"):
                     return self._send(200, {"user": {"fullName": "Tester"}})
+                if path.endswith("/2/users/me"):
+                    return self._send(200, {"data": {"username": "tester"}})
+                if path.endswith("/api/v1/me"):
+                    return self._send(200, {"name": "tester"})
+                if path.endswith("/v5/user_account"):
+                    return self._send(200, {"username": "tester"})
+                if path.endswith("/v2/userinfo"):
+                    return self._send(200, {"name": "Tester"})
+                if path.endswith("/v1/me"):
+                    return self._send(200, {"data": {"username": "tester"}})
+                if path.endswith("/wp-json/wp/v2/users/me"):
+                    return self._send(200, {"name": "Tester"})
+                if "/v1.0/me" in path:
+                    return self._send(200, {"id": "1", "username": "tester"})
+                if path.endswith("/page123"):
+                    return self._send(200, {"name": "Test Page"})
+                if path.endswith("/ig123"):
+                    return self._send(200, {"username": "tester"})
+                if path.endswith("/posts") or "/blogs/" in path and "/posts/" not in path:
+                    return self._send(200, {"name": "Test Blog"})
+                if "/wp-json/wp/v2" in path or path.endswith("/api/v1/me"):
+                    return self._send(200, {"name": "Tester"})
                 return self._send(404, {"error": "not found"})
 
             def do_POST(self) -> None:  # noqa: N802
@@ -110,6 +132,34 @@ class MockAPIs:
                     return self._send(200, {"item": {"link": "https://raindrop.io/tester/collection-1"}})
                 if "/services/" in path:
                     return self._send(200, {"ok": True})
+                if path.endswith("/2/tweets"):
+                    return self._send(201, {"data": {"id": "12345"}})
+                if path.endswith("/api/v1/access_token"):
+                    return self._send(200, {"access_token": "rd-token"})
+                if path.endswith("/api/submit"):
+                    return self._send(200, {"json": {"errors": [], "data": {"url": "https://reddit.com/r/test/1"}}})
+                if path.endswith("/v5/pins"):
+                    return self._send(201, {"id": "999"})
+                if path.endswith("/feed"):
+                    return self._send(200, {"id": "page123_1"})
+                if path.endswith("/media_publish"):
+                    return self._send(200, {"id": "post1"})
+                if path.endswith("/media"):
+                    return self._send(200, {"id": "creation1"})
+                if path.endswith("/threads_publish"):
+                    return self._send(200, {"id": "post2"})
+                if path.endswith("/threads"):
+                    return self._send(200, {"id": "creation2"})
+                if path.endswith("/rest/posts"):
+                    return self._send(201, {"id": "urn:li:share:1"})
+                if "/v1/users/" in path and path.endswith("/posts"):
+                    return self._send(201, {"data": {"url": "https://medium.com/@tester/deal"}})
+                if path.endswith("/token"):
+                    return self._send(200, {"access_token": "g-token"})
+                if "/blogs/" in path and path.endswith("/posts/"):
+                    return self._send(201, {"url": "https://testblog.blogspot.com/2026/11/deal.html"})
+                if "/wp-json/wp/v2/posts" in path:
+                    return self._send(201, {"link": "https://test.blog/2026/11/deal"})
                 return self._send(404, {"error": "not found"})
 
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)

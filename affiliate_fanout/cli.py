@@ -44,11 +44,23 @@ PLATFORM_LIMITS: Dict[str, int] = {
     "devto": 20000,
     "raindrop": 1000,
     "slack": 2000,
+    "x": 280,
+    "reddit": 40000,
+    "pinterest": 500,
+    "facebook": 63206,
+    "instagram": 2200,
+    "threads": 500,
+    "linkedin": 3000,
+    "medium": 20000,
+    "blogger": 20000,
+    "wordpress": 20000,
 }
 
 DEFAULT_PLATFORMS = [
     "telegram", "vk", "tumblr", "bluesky", "mastodon", "akkoma", "pixelfed",
     "devto", "telegraph", "discord", "slack", "raindrop",
+    "x", "reddit", "pinterest", "facebook", "instagram", "threads",
+    "linkedin", "medium", "blogger", "wordpress",
 ]
 DEFAULT_TEXT = "Deal: {url}"
 DEFAULT_DISCLOSURE = "Ad · affiliate link"
@@ -117,6 +129,46 @@ def verify_platform(env: Dict[str, str], platform: str) -> Dict[str, Any]:
             if not get(env, "SLACK_WEBHOOK_URL"):
                 return {"ok": False, "detail": "нет SLACK_WEBHOOK_URL"}
             return adapters.verify_slack(env)
+        if platform == "x":
+            if not get(env, "X_API_KEY"):
+                return {"ok": False, "detail": "нет X_API_KEY/ACCESS_TOKEN (OAuth1)"}
+            return adapters.verify_x(env)
+        if platform == "reddit":
+            if not get(env, "REDDIT_CLIENT_ID"):
+                return {"ok": False, "detail": "нет REDDIT_CLIENT_ID/SECRET/USERNAME"}
+            return adapters.verify_reddit(env)
+        if platform == "pinterest":
+            if not get(env, "PINTEREST_ACCESS_TOKEN"):
+                return {"ok": False, "detail": "нет PINTEREST_ACCESS_TOKEN (нужен approved app)"}
+            return adapters.verify_pinterest(env)
+        if platform == "facebook":
+            if not get(env, "FACEBOOK_PAGE_TOKEN"):
+                return {"ok": False, "detail": "нет FACEBOOK_PAGE_ID/TOKEN"}
+            return adapters.verify_facebook(env)
+        if platform == "instagram":
+            if not get(env, "INSTAGRAM_ACCESS_TOKEN"):
+                return {"ok": False, "detail": "нет INSTAGRAM_USER_ID/TOKEN"}
+            return adapters.verify_instagram(env)
+        if platform == "threads":
+            if not get(env, "THREADS_ACCESS_TOKEN"):
+                return {"ok": False, "detail": "нет THREADS_USER_ID/TOKEN"}
+            return adapters.verify_threads(env)
+        if platform == "linkedin":
+            if not get(env, "LINKEDIN_ACCESS_TOKEN"):
+                return {"ok": False, "detail": "нет LINKEDIN_ACCESS_TOKEN/AUTHOR_URN"}
+            return adapters.verify_linkedin(env)
+        if platform == "medium":
+            if not get(env, "MEDIUM_TOKEN"):
+                return {"ok": False, "detail": "нет MEDIUM_TOKEN (legacy API)"}
+            return adapters.verify_medium(env)
+        if platform == "blogger":
+            if not get(env, "BLOGGER_REFRESH_TOKEN"):
+                return {"ok": False, "detail": "нет BLOGGER_* OAuth-ключей"}
+            return adapters.verify_blogger(env)
+        if platform == "wordpress":
+            if not (get(env, "WP_BASE_URL") or get(env, "WPCOM_ACCESS_TOKEN")):
+                return {"ok": False, "detail": "нет WP_BASE_URL (self-hosted) или WPCOM_ACCESS_TOKEN"}
+            return adapters.verify_wordpress(env)
         return {"ok": False, "detail": "неизвестная платформа"}
     except (ConfigError, adapters.AdapterError) as exc:
         return {"ok": False, "detail": str(exc)}
@@ -234,6 +286,26 @@ def _publish_one(env: Dict[str, str], platform: str, url: str, text: str, title:
             results.append(adapters.post_raindrop(env, title, url, text).as_dict())
         elif platform == "slack":
             results.append(adapters.post_slack(env, text).as_dict())
+        elif platform == "x":
+            results.append(adapters.post_x(env, text).as_dict())
+        elif platform == "reddit":
+            results.append(adapters.post_reddit(env, title, url).as_dict())
+        elif platform == "pinterest":
+            results.append(adapters.post_pinterest(env, title, url, text).as_dict())
+        elif platform == "facebook":
+            results.append(adapters.post_facebook(env, text, url).as_dict())
+        elif platform == "instagram":
+            results.append(adapters.post_instagram(env, text).as_dict())
+        elif platform == "threads":
+            results.append(adapters.post_threads(env, text).as_dict())
+        elif platform == "linkedin":
+            results.append(adapters.post_linkedin(env, text).as_dict())
+        elif platform == "medium":
+            results.append(adapters.post_medium(env, title, text).as_dict())
+        elif platform == "blogger":
+            results.append(adapters.post_blogger(env, title, text).as_dict())
+        elif platform == "wordpress":
+            results.append(adapters.post_wordpress(env, title, text).as_dict())
         else:
             results.append({"platform": platform, "ok": False, "detail": "неизвестная платформа"})
     except (ConfigError, adapters.AdapterError) as exc:
