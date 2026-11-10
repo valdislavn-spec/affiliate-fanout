@@ -244,6 +244,13 @@ class FanoutTests(unittest.TestCase):
         self.assertEqual(request["body"]["marker"], 674170)
         self.assertEqual(request["body"]["links"][0]["sub_id"], "fanout_telegram")
 
+    def test_travelpayouts_unsubscribed_brand_raises(self) -> None:
+        from affiliate_fanout.env import ConfigError
+        tp = TravelpayoutsLinks(self.env)
+        with self.assertRaises(ConfigError) as caught:
+            tp.create([("https://www.unsubscribed.example/", "fanout_us_x")])
+        self.assertIn("Links API", str(caught.exception))
+
     def test_tracker_wrap(self) -> None:
         tracker = LinkTracker(self.env)
         url = tracker.wrap("https://aviasales.tpk.ro/ABC", "telegram")

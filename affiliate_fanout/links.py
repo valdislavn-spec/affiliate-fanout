@@ -68,16 +68,36 @@ class TravelpayoutsLinks:
         result = data.get("result") or {}
         links = result.get("links") or []
         urls: List[str] = []
+        failures: List[str] = []
         for item in links:
             if not isinstance(item, dict):
                 continue
-            partner = item.get("partner_url") or item.get("url")
-            if partner:
-                urls.append(str(partner))
+            code = str(item.get("code") or "")
+            partner = (item.get("partner_url") or "").strip()
+            if code and code != "success":
+                failures.append(
+                    "{}: {}{}".format(
+                        item.get("url", ""),
+                        code,
+                        " ({})".format(item.get("message")) if item.get("message") else "",
+                    )
+                )
+                continue
+            if not partner:
+                failures.append(
+                    "{}: partner_url пуст{}".format(
+                        item.get("url", ""),
+                        " ({})".format(item.get("message")) if item.get("message") else "",
+                    )
+                )
+                continue
+            urls.append(partner)
         if len(urls) != len(items):
             raise ConfigError(
-                "Links API вернул {} ссылок из {}: {}".format(
-                    len(urls), len(items), str(data)[:300]
+                "Links API: {}/{} ссылок создано. Ошибки: {}. "
+                "Проверьте, что проект (trs) подписан на программу бренда "
+                "(Travelpayouts → My Programs).".format(
+                    len(urls), len(items), "; ".join(failures) or str(data)[:300]
                 )
             )
         return urls

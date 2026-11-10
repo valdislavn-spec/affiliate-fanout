@@ -118,7 +118,10 @@ class MockAPIs:
                     links = []
                     for item in body.get("links") or []:
                         sub = item.get("sub_id") or "x"
-                        links.append({"url": item.get("url"), "code": "success", "partner_url": "https://aviasales.tpk.ro/" + str(sub).upper()})
+                        if "unsubscribed" in str(item.get("url")):
+                            links.append({"url": item.get("url"), "code": "failed", "message": "trs is not subscribed for brand", "partner_url": ""})
+                        else:
+                            links.append({"url": item.get("url"), "code": "success", "partner_url": "https://aviasales.tpk.ro/" + str(sub).upper()})
                     return self._send(200, {"result": {"marker": body.get("marker"), "trs": body.get("trs"), "shorten": True, "links": links}})
                 if path.endswith("/admin/links"):
                     return self._send(200, {"ok": True, "record": {"code": body.get("code"), "target": body.get("target")}})
