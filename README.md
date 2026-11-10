@@ -137,6 +137,45 @@ EN/ES-каналы контент-завода и Telegram-каналы сдел
 
 ---
 
+## Одобрения приложений: X, Meta, Pinterest, LinkedIn
+
+Пакет для подачи заявок — в [`approval-kit/`](approval-kit/README.md):
+пошаговые инструкции, готовые тексты для форм, scopes, скринкаст-сценарий.
+
+**Опубликовано для ревью (GitHub Pages):**
+
+| Документ | URL |
+|---|---|
+| Website | https://valdislavn-spec.github.io/travel-finds/ |
+| Privacy Policy | https://valdislavn-spec.github.io/travel-finds/privacy.html |
+| Terms of Use | https://valdislavn-spec.github.io/travel-finds/terms.html |
+| OAuth callback (redirect URI) | https://valdislavn-spec.github.io/travel-finds/oauth-callback.html |
+
+**Статус:** X и LinkedIn — self-serve (без ревью, часы–дни); Pinterest —
+видео-ревью (3–10 дней); Meta (FB/IG/Threads) — Business Verification + App
+Review (1–3 недели). Подробно: [approval-kit/README.md](approval-kit/README.md).
+
+**Токены после одобрения** — хелпер `tools/oauth_tokens.py`:
+
+```bash
+# 1) authorization URL (для X также выведет PKCE verifier)
+python3 tools/oauth_tokens.py --provider pinterest \
+  --client-id ... --client-secret ... --url
+
+# 2) обмен code (из callback-страницы) на токены и печать .env-строк
+python3 tools/oauth_tokens.py --provider pinterest \
+  --client-id ... --client-secret ... --exchange "<code>"
+
+# Meta: сразу выведет page token, IG user id и threads user id
+python3 tools/oauth_tokens.py --provider meta --client-id ... --client-secret ... --exchange "<code>"
+```
+
+Затем: `--verify` → `--market us`/`--market latam` → `--execute`.
+
+Email-канал (Brevo) — по вашему решению пока не подключается.
+
+---
+
 ## Переменные окружения
 
 ```dotenv
