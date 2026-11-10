@@ -434,9 +434,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--platforms", default="all", help="список через запятую или all")
     parser.add_argument("--brand-url", default="", help="URL бренда → партнёрская ссылка (Travelpayouts)")
     parser.add_argument("--url", default="", help="готовая ссылка (без конвертации)")
-    parser.add_argument("--text", default=DEFAULT_TEXT, help="шаблон поста; {url} подставится")
-    parser.add_argument("--title", default="Affiliate deal", help="заголовок (Tumblr/Telegraph)")
-    parser.add_argument("--disclosure", default=DEFAULT_DISCLOSURE, help="пометка «реклама/партнёрская ссылка»")
+    parser.add_argument(
+        "--market", choices=["us", "latam", ""], default="",
+        help="рынок: us (EN, США) или latam (ES, Латинская Америка)",
+    )
+    parser.add_argument(
+        "--lang", choices=["en", "es", "ru", ""], default="",
+        help="язык текста/раскрытия (по умолчанию — из рынка)",
+    )
+    parser.add_argument("--text", default=None, help="шаблон поста; {url} подставится (по умолчанию — под рынок)")
+    parser.add_argument("--title", default="Travel deal", help="заголовок (Tumblr/Telegraph/Medium/Blogger/WordPress)")
+    parser.add_argument("--disclosure", default=None, help="пометка «реклама/партнёрская ссылка» (по умолчанию — под рынок)")
     parser.add_argument("--trs", default="", help="ID проекта Travelpayouts (trs)")
     parser.add_argument("--subid-prefix", default="", help="префикс sub_id: <prefix>_<platform> (по умолчанию — под рынок)")
     parser.add_argument("--allow-plain", action="store_true", help="разрешить постинг без партнёрских ссылок")
