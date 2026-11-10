@@ -120,6 +120,8 @@ def verify_platform(env: Dict[str, str], platform: str) -> Dict[str, Any]:
         return {"ok": False, "detail": "неизвестная платформа"}
     except (ConfigError, adapters.AdapterError) as exc:
         return {"ok": False, "detail": str(exc)}
+    except Exception as exc:  # noqa: BLE001 - report any transport/API error per platform
+        return {"ok": False, "detail": "{}: {}".format(type(exc).__name__, exc)}
 
 
 def run_verify(env: Dict[str, str], platforms: List[str]) -> Dict[str, Any]:

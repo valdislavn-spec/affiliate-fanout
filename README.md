@@ -33,7 +33,7 @@
 | Akkoma | ✅ | настроен (Akkoma) |
 | Pixelfed | ✅ | настроен (Pixelfed) |
 | Telegraph | ✅ | без авторизации |
-| Свой link-tracker | ✅ | 11 ссылок в трекере |
+| Свой link-tracker | ✅ | 23 ссылки, коды `fanout-*` |
 | Travelpayouts Links API | ✅ | токен + маркер (нужен `TRAVELPAYOUTS_TRS`) |
 | Mastodon | ⚠️ | аккаунт отключён на инстансе (нужен другой инстанс/аккаунт) |
 | VK | ⚠️ | нужен `VK_ACCESS_TOKEN` (сейчас пуст) — код готов (`wall.post`) |
@@ -45,6 +45,10 @@
 | Pinterest | ⚠️ | приложение на ревью; официальный API после аппрува |
 
 Проверить на своей машине: `python -m affiliate_fanout --env .env --verify`
+
+Готовые ссылки под каждую платформу (Travelpayouts `sub_id` + свой tracker)
+генерируются в `local/links-ready.json` (каталог в `.gitignore`) — их можно
+вставлять в посты/био/лендинги без запуска публикации.
 
 ---
 
