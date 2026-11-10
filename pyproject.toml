@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "affiliate-fanout"
+version = "0.1.0"
+description = "Publish affiliate links to free social APIs (Telegram, Tumblr, Bluesky, Akkoma/Pixelfed/Mastodon, Discord, Telegraph) with Travelpayouts sub_id tracking"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "affiliate-fanout contributors" }]
+keywords = ["affiliate", "travelpayouts", "telegram", "tumblr", "bluesky", "mastodon", "pixelfed", "crosspost", "marketing"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Internet :: WWW/HTTP",
+]
+dependencies = []
+
+[project.scripts]
+affiliate-fanout = "affiliate_fanout.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/valdislavn-spec/affiliate-fanout"
+Source = "https://github.com/valdislavn-spec/affiliate-fanout"
+Issues = "https://github.com/valdislavn-spec/affiliate-fanout/issues"
+
+[tool.setuptools]
+packages = ["affiliate_fanout"]
