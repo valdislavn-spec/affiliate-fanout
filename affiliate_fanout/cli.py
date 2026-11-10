@@ -65,6 +65,66 @@ DEFAULT_PLATFORMS = [
 DEFAULT_TEXT = "Deal: {url}"
 DEFAULT_DISCLOSURE = "Ad · affiliate link"
 
+#: Market presets. ``us`` — English, US audiences; ``latam`` — neutral Spanish
+#: for Latin America. Programs and channels differ; see README.
+LANG_TEXTS: Dict[str, str] = {
+    "en": "Travel deal: {url}",
+    "es": "Oferta de viaje: {url}",
+    "ru": "Тревел-предложение: {url}",
+}
+
+MARKETS: Dict[str, Dict[str, Any]] = {
+    "us": {
+        "lang": "en",
+        "texts": {"en": "Travel deal: cheap flights, hotels and eSIM — {url}"},
+        "disclosures": {"en": "Ad · affiliate link"},
+        "subid_prefix": "fanout_us",
+        "platforms": [
+            "telegram", "x", "pinterest", "facebook", "instagram", "threads",
+            "reddit", "wordpress", "blogger", "medium", "devto", "telegraph",
+        ],
+    },
+    "latam": {
+        "lang": "es",
+        "texts": {"es": "Oferta de viaje: vuelos baratos, hoteles y eSIM — {url}"},
+        "disclosures": {"es": "Publicidad · enlace de afiliado"},
+        "subid_prefix": "fanout_latam",
+        "platforms": [
+            "telegram", "instagram", "facebook", "threads", "pinterest", "x",
+            "wordpress", "blogger", "telegraph", "devto",
+        ],
+    },
+}
+
+
+def resolve_market_options(
+    market: str = "",
+    lang: str = "",
+    text: Optional[str] = None,
+    disclosure: Optional[str] = None,
+    subid_prefix: str = "",
+) -> Dict[str, str]:
+    """Resolve language/text/disclosure/sub_id defaults for a market."""
+    config = MARKETS.get((market or "").strip().lower(), {})
+    chosen_lang = (lang or config.get("lang") or "en").lower()
+    resolved_text = (
+        text
+        or (config.get("texts") or {}).get(chosen_lang)
+        or LANG_TEXTS.get(chosen_lang, DEFAULT_TEXT.format(url="{url}"))
+    )
+    resolved_disclosure = disclosure
+    if resolved_disclosure is None:
+        resolved_disclosure = (config.get("disclosures") or {}).get(
+            chosen_lang, DEFAULT_DISCLOSURE
+        )
+    resolved_prefix = subid_prefix or config.get("subid_prefix") or "fanout"
+    return {
+        "lang": chosen_lang,
+        "text": resolved_text,
+        "disclosure": resolved_disclosure,
+        "subid_prefix": resolved_prefix,
+    }
+
 
 def compose_text(template: str, url: str, disclosure: str, limit: int) -> str:
     """Render ``template`` with ``url``, keep URL/disclosure inside ``limit``."""
@@ -378,7 +438,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--title", default="Affiliate deal", help="заголовок (Tumblr/Telegraph)")
     parser.add_argument("--disclosure", default=DEFAULT_DISCLOSURE, help="пометка «реклама/партнёрская ссылка»")
     parser.add_argument("--trs", default="", help="ID проекта Travelpayouts (trs)")
-    parser.add_argument("--subid-prefix", default="fanout", help="префикс sub_id: <prefix>_<platform>")
+    parser.add_argument("--subid-prefix", default="", help="префикс sub_id: <prefix>_<platform> (по умолчанию — под рынок)")
     parser.add_argument("--allow-plain", action="store_true", help="разрешить постинг без партнёрских ссылок")
     parser.add_argument("--tracker", action="store_true", help="обернуть ссылки в свой click-tracker")
     parser.add_argument("--telegram-chat", action="append", help="chat_id канала (можно несколько)")
@@ -441,6 +501,16 @@ def _human(report: Dict[str, Any]) -> str:
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     env = load_env(args.env or None)
+    resolved = resolve_market_options(
+        market=args.market,
+        lang=args.lang,
+        text=args.text,
+        disclosure=args.disclosure,
+        subid_prefix=args.subid_prefix,
+    )
+    args.text = resolved["text"]
+    args.disclosure = resolved["disclosure"]
+    args.subid_prefix = resolved["subid_prefix"]
     try:
         platforms = resolve_platforms(args.platforms)
     except ConfigError as exc:

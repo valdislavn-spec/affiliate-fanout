@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from affiliate_fanout import adapters
-from affiliate_fanout.cli import compose_text, run_publish, run_verify
+from affiliate_fanout.cli import compose_text, resolve_market_options, run_publish, run_verify
 from affiliate_fanout.env import load_env
 from affiliate_fanout.links import LinkTracker, TravelpayoutsLinks
 
@@ -204,6 +204,30 @@ class FanoutTests(unittest.TestCase):
         request = self.api.find("/2/tweets")
         self.assertIn("OAuth", request["headers"]["Authorization"])
         self.assertEqual(request["body"]["text"], "hello x")
+
+    def test_market_presets_us(self) -> None:
+        resolved = resolve_market_options(market="us")
+        self.assertEqual(resolved["lang"], "en")
+        self.assertIn("Ad", resolved["disclosure"])
+        self.assertEqual(resolved["subid_prefix"], "fanout_us")
+        self.assertIn("flights", resolved["text"])
+
+    def test_market_presets_latam(self) -> None:
+        resolved = resolve_market_options(market="latam")
+        self.assertEqual(resolved["lang"], "es")
+        self.assertIn("Publicidad", resolved["disclosure"])
+        self.assertEqual(resolved["subid_prefix"], "fanout_latam")
+        self.assertIn("vuelos", resolved["text"])
+
+    def test_market_lang_override_and_explicit_text(self) -> None:
+        override = resolve_market_options(market="latam", lang="en")
+        self.assertIn("Travel deal", override["text"])
+        explicit = resolve_market_options(
+            market="us", text="Custom {url}", disclosure="Ad", subid_prefix="custom"
+        )
+        self.assertEqual(explicit["text"], "Custom {url}")
+        self.assertEqual(explicit["disclosure"], "Ad")
+        self.assertEqual(explicit["subid_prefix"], "custom")
 
     # ---------------------------------------------------------------- links
     def test_travelpayouts_creates_links_with_subids(self) -> None:

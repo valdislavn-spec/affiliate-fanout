@@ -80,6 +80,63 @@ python3 -m affiliate_fanout --env .env \
 
 ---
 
+## США + Латинская Америка: рынки и программы
+
+Два пресета: `--market us` (английский) и `--market latam` (нейтральный
+испанский es-419).
+
+| | США (`us`) | Латинская Америка (`latam`) |
+|---|---|---|
+| Язык | EN-US | ES-419 (нейтральный) |
+| Раскрытие | `Ad · affiliate link` | `Publicidad · enlace de afiliado` |
+| `sub_id` | `fanout_us_<platform>` | `fanout_latam_<platform>` |
+| Приоритет каналов | Pinterest, Meta (FB/IG/Threads), SEO-сайт, email, YouTube Shorts, Reddit; X — вторично | Instagram, Facebook, TikTok, Pinterest, YouTube, Telegram (вторично), email |
+| Страны | США (хубы: NYC, LA, MIA, SFO) | Мексика, Колумбия, Аргентина, Чили, Перу, Центральная Америка |
+| Средний чек | высокий ($450+ авиа/отели) | ниже, но объём и вовлечённость выше |
+
+**Важно по программам:** часть брендов принимает только сайты и не одобряет
+проекты на базе соцстраниц/мессенджеров (официальная формулировка Travelpayouts).
+
+| Разрешено только сайт/White Label | Разрешены соцсети и мессенджеры |
+|---|---|
+| Kiwi, Klook, Booking, Agoda, Expedia, Viator, Hotels.com, Hostelworld, Vrbo, Saily, GoCity | Trip.com, GetYourGuide, Omio, DiscoverCars, 12Go, Yesim, Airalo, KiwiTaxi, Localrent, GetTransfer, WeGoTrip, KKday, Tiqets |
+
+Отсюда практика:
+- **Telegram / FB / IG / Pinterest / X** — используйте программы из правой
+  колонки (GetYourGuide 8%, Trip.com 1–5,5%, Omio 6%, DiscoverCars 23–54%,
+  eSIM 12–18%).
+- **SEO-сайт / White Label** — можно брать Kiwi (3%, AOV $450), Klook (2–5%),
+  Booking/Agoda/Expedia.
+- Проверяйте в кабинете About → «Allowed brand promotion methods»: финальное
+  одобрение всегда за брендом.
+
+**Контент-углы US:** «cheap flights from {hub}», weekend getaways, eSIM для
+поездок в Европу, аренда авто, ошибки при бронировании.
+**Контент-углы LatAm:** «vuelos baratos desde CDMX/Bogotá/Buenos Aires»,
+escapadas, eSIM, excursiones, equipaje y seguros.
+
+Примеры запуска:
+
+```bash
+# США (EN): пост в соцсети + партнёрская ссылка GetYourGuide
+python3 -m affiliate_fanout --env .env --market us \
+  --brand-url https://www.getyourguide.com/ --trs 597672 \
+  --platforms pinterest,instagram,facebook,threads,x,reddit,telegram \
+  --tracker --execute
+
+# Латинская Америка (ES): Instagram/Facebook/Pinterest
+python3 -m affiliate_fanout --env .env --market latam \
+  --brand-url https://www.kiwi.com/ --trs 597672 \
+  --platforms instagram,facebook,pinterest,x,telegram \
+  --tracker --execute
+```
+
+У вас уже есть база под оба рынка: EN/ES-сайт `travel-finds` (GitHub Pages),
+EN/ES-каналы контент-завода и Telegram-каналы сделок — их можно связать с
+этими пресетами.
+
+---
+
 ## Переменные окружения
 
 ```dotenv
@@ -145,6 +202,8 @@ LINK_TRACKER_BASE=... LINK_TRACKER_ADMIN_TOKEN=...
 | Флаг | Назначение |
 |---|---|
 | `--env PATH` | загрузить `.env` (секреты не печатаются) |
+| `--market us\|latam` | пресет рынка: язык, раскрытие, `sub_id`, приоритет каналов |
+| `--lang en\|es\|ru` | переопределить язык текста/раскрытия |
 | `--verify` | проверить подключения всех платформ |
 | `--platforms all\|a,b,c` | `telegram,vk,tumblr,bluesky,mastodon,akkoma,pixelfed,devto,telegraph,discord,slack,raindrop,x,reddit,pinterest,facebook,instagram,threads,linkedin,medium,blogger,wordpress` |
 | `--brand-url URL` | URL бренда → партнёрская ссылка Travelpayouts |
