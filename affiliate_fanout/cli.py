@@ -146,6 +146,52 @@ def compose_text(template: str, url: str, disclosure: str, limit: int) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Telegram-специфичное форматирование
+# ---------------------------------------------------------------------------
+TELEGRAM_EMOJI: Dict[str, str] = {
+    "flights": "✈️",
+    "hotel": "🏨",
+    "esim": "📶",
+    "transfer": "🚕",
+    "deals": "🔥",
+    "travel": "🌍",
+    "default": "💡",
+}
+
+
+def compose_telegram_text(
+    title: str,
+    body: str,
+    url: str,
+    category: str = "default",
+    disclosure: str = DEFAULT_DISCLOSURE,
+    limit: int = PLATFORM_LIMITS["telegram"],
+) -> str:
+    """Сформировать пост для Telegram с HTML-разметкой.
+
+    Структура: <emoji> <b>Заголовок</b> · абзац тела · ссылка · раскрытие рекламы.
+    Поддерживает HTML-теги Telegram: <b>, <a>. Обрезает тело, если не влезет в limit.
+    """
+    emoji = TELEGRAM_EMOJI.get(category, TELEGRAM_EMOJI["default"])
+    parts: List[str] = ["{} <b>{}</b>".format(emoji, title)]
+    if body:
+        parts.append(body)
+    parts.append('<a href="{}">Перейти по ссылке</a>'.format(url))
+    if disclosure:
+        parts.append(disclosure)
+    rendered = "\n\n".join(parts)
+    if len(rendered) <= limit:
+        return rendered
+    tail = '<a href="{}">Перейти по ссылке</a>'.format(url)
+    if disclosure:
+        tail += "\n\n" + disclosure
+    room = max(0, limit - len(parts[0]) - len(tail) - 2)
+    body = body[:room].rstrip()
+    middle = "\n\n" + body if body else ""
+    return (parts[0] + middle + "\n\n" + tail)[:limit]
+
+
+# ---------------------------------------------------------------------------
 # platform verification
 # ---------------------------------------------------------------------------
 def verify_platform(env: Dict[str, str], platform: str) -> Dict[str, Any]:
@@ -390,6 +436,7 @@ def run_publish(
     telegram_targets: List[Tuple[str, str]],
     execute: bool,
     resolver: bool,
+    telegram_category: str = "default",
 ) -> Dict[str, Any]:
     report: Dict[str, Any] = {"mode": "execute" if execute else "dry-run", "platforms": []}
     links = _resolve_platform_links(
@@ -399,7 +446,17 @@ def run_publish(
     for platform in platforms:
         url = links.get(platform) or brand_url or direct_url or ""
         limit = PLATFORM_LIMITS.get(platform, 4096)
-        text = compose_text(template, url, disclosure, limit)
+        if platform == "telegram":
+            text = compose_telegram_text(
+                title=title,
+                body=template,
+                url=url,
+                category=telegram_category,
+                disclosure=disclosure,
+                limit=limit,
+            )
+        else:
+            text = compose_text(template, url, disclosure, limit)
         item: Dict[str, Any] = {
             "platform": platform,
             "limit": limit,
@@ -414,7 +471,17 @@ def run_publish(
                     item["tracked_url"] = url
                 except Exception as exc:  # noqa: BLE001 - tracker is optional
                     item["tracker_error"] = str(exc)
-            text = compose_text(template, url, disclosure, limit)
+            if platform == "telegram":
+                text = compose_telegram_text(
+                    title=title,
+                    body=template,
+                    url=url,
+                    category=telegram_category,
+                    disclosure=disclosure,
+                    limit=limit,
+                )
+            else:
+                text = compose_text(template, url, disclosure, limit)
             item["results"] = _publish_one(env, platform, url, text, title, telegram_targets)
         else:
             item["status"] = "planned (dry-run)" if not resolver else "links resolved (dry-run)"
@@ -452,6 +519,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--telegram-chat", action="append", help="chat_id канала (можно несколько)")
     parser.add_argument("--telegram-env", default="", help="суффиксы TELEGRAM_CHAT_ID_<X> через запятую")
     parser.add_argument("--telegram-all", action="store_true", help="все TELEGRAM_CHAT_ID_* из env")
+    parser.add_argument(
+        "--telegram-category",
+        choices=list(TELEGRAM_EMOJI.keys()),
+        default="default",
+        help="категория поста для Telegram (подбирает emoji и форматирование)",
+    )
     parser.add_argument("--verify", action="store_true", help="только проверить подключения")
     parser.add_argument("--execute", action="store_true", help="реально постить (по умолчанию dry-run)")
     parser.add_argument("--resolve", action="store_true", help="в dry-run создать партнёрские ссылки")
@@ -545,6 +618,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             telegram_targets=_telegram_targets(args, env),
             execute=args.execute,
             resolver=args.resolve or args.execute,
+            telegram_category=args.telegram_category,
         )
         _print(report, args.json)
         if args.execute:
